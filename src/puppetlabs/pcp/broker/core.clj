@@ -306,6 +306,7 @@
    connection :- Connection]
   (assert (= (:state connection) :associated))
   (let [data (message/get-json-data message)]
+    (println "DATA IS" data)
     (s/validate p/InventoryRequest data)
     (let [response-data (make-inventory_response-data-content broker data)]
       (deliver-message
