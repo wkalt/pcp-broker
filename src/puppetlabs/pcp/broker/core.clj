@@ -27,6 +27,7 @@
    :authorization-check IFn
    :uri-map            ConcurrentHashMap ;; Mapping of Uri to Websocket, for sending
    :connections        ConcurrentHashMap ;; Mapping of Websocket session to Connection state
+   :inventory          ConcurrentHashMap ;; Mapping of Uri to websocket session
    :metrics-registry   Object
    :metrics            {s/Keyword Object}
    :state              Atom})
@@ -35,7 +36,7 @@
   [broker :- Broker]
   (let [registry (:metrics-registry broker)]
     (gauges/gauge-fn registry ["puppetlabs.pcp.connections"]
-                     (fn [] (count (keys (:connections broker)))))
+                     (fn [] (count (:inventory broker))))
     {:on-connect       (.timer registry "puppetlabs.pcp.on-connect")
      :on-close         (.timer registry "puppetlabs.pcp.on-close")
      :on-message       (.timer registry "puppetlabs.pcp.on-message")
@@ -172,18 +173,20 @@
 ;; NB(michael): using (s/maybe Connection) in the signature for the sake of testing
 (s/defn deliver-message
   "Message consumer. Delivers a message to the websocket indicated by the :targets field"
-  [broker :- Broker message :- Message sender :- (s/maybe Connection)]
+  [broker :- Broker
+   message :- Message
+   sender :- (s/maybe Connection)]
   (assert (not (multicast-message? message)))
   (if-let [websocket (get-websocket broker (first (:targets message)))]
     (try
       (let [connection (get-connection broker websocket)
             encode (get-in connection [:codec :encode])]
-        (sl/maplog
-          :debug (merge (summarize message)
-                        (connection/summarize connection)
-                        {:type :message-delivery})
-          (i18n/trs "Delivering '{messageid}' for '{destination}' to '{commonname}' at '{remoteaddress}'"))
         (locking websocket
+          (sl/maplog
+            :debug (merge (summarize message)
+                          (connection/summarize connection)
+                          {:type :message-delivery})
+            (i18n/trs "Delivering '{messageid}' for '{destination}' to '{commonname}' at '{remoteaddress}'"))
           (time! (:on-send (:metrics broker))
                  (websockets-client/send! websocket (encode message)))))
       (catch Exception e
@@ -296,7 +299,9 @@
   "Process a request for inventory data.
    This function assumes that the requester client is associated.
    Returns nil."
-  [broker :- Broker message :- Message connection :- Connection]
+  [broker :- Broker
+   message :- Message
+   connection :- Connection]
   (assert (= (:state connection) :associated))
   (let [data (message/get-json-data message)]
     (s/validate p/InventoryRequest data)
@@ -576,7 +581,8 @@
                            :statuscode status-code
                            :reason reason)
              (i18n/trs "client '{commonname}' disconnected from '{remoteaddress}' '{statuscode}' '{reason}'"))
-           (remove-connection! broker ws))))
+           (remove-connection! broker ws)
+           (.remove (:inventory broker) ws))))
 
 (s/defn build-websocket-handlers :- {s/Keyword IFn}
   [broker :- Broker codec]
@@ -629,6 +635,7 @@
                               :metrics-registry    (get-metrics-registry)
                               :connections         (ConcurrentHashMap.)
                               :uri-map             (ConcurrentHashMap.)
+                              :inventory           (ConcurrentHashMap.)
                               :state               (atom :starting)}
           metrics            (build-and-register-metrics broker)
           broker             (assoc broker :metrics metrics)]
