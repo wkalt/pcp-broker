@@ -24,6 +24,8 @@
                 :uri-map             (ConcurrentHashMap.)
                 :connections         (ConcurrentHashMap.)
                 :metrics-registry    metrics.core/default-registry
+                :epoch               (ks/uuid)
+                :version             (atom 0)
                 :metrics             {}
                 :state               (atom :running)}
         metrics (build-and-register-metrics broker)

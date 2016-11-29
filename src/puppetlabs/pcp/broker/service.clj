@@ -3,6 +3,7 @@
             [puppetlabs.pcp.broker.in-memory-inventory :refer [make-inventory record-client find-clients]]
             [puppetlabs.structured-logging.core :as sl]
             [puppetlabs.trapperkeeper.core :as trapperkeeper]
+            [puppetlabs.kitchensink.core :as ks]
             [puppetlabs.trapperkeeper.services :refer [service-context get-service]]
             [puppetlabs.trapperkeeper.services.status.status-core :as status-core]
             [puppetlabs.trapperkeeper.services.webserver.jetty9-core :as jetty9-core]
@@ -20,6 +21,8 @@
           broker             (core/init {:add-websocket-handler (partial add-websocket-handler this)
                                          :record-client         (partial record-client inventory)
                                          :find-clients          (partial find-clients inventory)
+                                         :epoch                 (ks/uuid)
+                                         :version               (atom 0)
                                          :authorization-check   authorization-check
                                          :get-metrics-registry  get-metrics-registry
                                          :get-route             (partial get-route this)})]

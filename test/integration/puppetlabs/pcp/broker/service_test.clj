@@ -20,6 +20,8 @@
             [slingshot.slingshot :refer [throw+ try+]]
             [schema.test :as st]))
 
+(def inventory-version-regex #"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}_\d+$")
+
 (def broker-config
   "A broker with ssl and own spool"
   {:authorization {:version 1
@@ -209,7 +211,7 @@
 (deftest other-messages-are-ignored-during-association-test
   (testing "During association, broker ignores messages other than associate_request"
     (with-app-with-config app broker-services broker-config
-      (dotestseq[version protocol-versions]
+      (dotestseq [version protocol-versions]
         (with-open [client (client/connect :certname "client01.example.com"
                                            :modify-association #(assoc % :messate_type "a_message_to_be_ignored")
                                            :check-association false
@@ -333,10 +335,12 @@
                           (message/set-expiry 5 :seconds)
                           (message/set-json-data {:query ["pcp://client01.example.com/test"]}))]
           (client/send! client request)
-          (let [response (client/recv! client)]
+          (let [response (client/recv! client)
+                json-data (message/get-json-data response)]
             (is (= "http://puppetlabs.com/inventory_response" (:message_type response)))
             (is (= (:id request) (:in-reply-to response)))
-            (is (= {:uris ["pcp://client01.example.com/test"]} (message/get-json-data response)))))))))
+            (is (= ["pcp://client01.example.com/test"] (:uris json-data)))
+            (is (re-matches inventory-version-regex (:version json-data)))))))))
 
 (deftest inventory-node-can-find-itself-wildcard-test
   (with-app-with-config app broker-services broker-config
@@ -350,9 +354,11 @@
                           (message/set-expiry 5 :seconds)
                           (message/set-json-data {:query ["pcp://*/test"]}))]
           (client/send! client request)
-          (let [response (client/recv! client)]
+          (let [response (client/recv! client)
+                {:keys [uris version]} (message/get-json-data response)]
             (is (= "http://puppetlabs.com/inventory_response" (:message_type response)))
-            (is (= {:uris ["pcp://client01.example.com/test"]} (message/get-json-data response)))))))))
+            (is (= ["pcp://client01.example.com/test"] uris))
+            (is (re-matches inventory-version-regex version))))))))
 
 (deftest inventory-node-cannot-find-previously-connected-node-test
   (with-app-with-config app broker-services broker-config
@@ -368,9 +374,11 @@
                           (message/set-expiry 5 :seconds)
                           (message/set-json-data {:query ["pcp://client02.example.com/test"]}))]
           (client/send! client request))
-        (let [response (client/recv! client)]
+        (let [response (client/recv! client)
+              {:keys [uris version]} (message/get-json-data response)]
           (is (= "http://puppetlabs.com/inventory_response" (:message_type response)))
-          (is (= {:uris []} (message/get-json-data response))))))))
+          (is (= [] uris))
+          (is (re-matches inventory-version-regex version)))))))
 
 (def no-inventory-broker-config
   "A broker that allows connections but no inventory requests"

@@ -292,8 +292,10 @@
             :state :associated))))))
 
 (s/defn make-inventory_response-data-content :- p/InventoryResponse
-  [uris]
-  {:uris uris})
+  [{:keys [find-clients epoch version] :as broker} {:keys [query]}]
+  (let [uris (doall (filter (partial get-websocket broker) (find-clients query)))]
+    {:uris uris
+     :version (str epoch "_" @version)}))
 
 (s/defn process-inventory-request
   "Process a request for inventory data.
@@ -305,8 +307,7 @@
   (assert (= (:state connection) :associated))
   (let [data (message/get-json-data message)]
     (s/validate p/InventoryRequest data)
-    (let [uris (doall (filter (partial get-websocket broker) ((:find-clients broker) (:query data))))
-          response-data (make-inventory_response-data-content uris)]
+    (let [response-data (make-inventory_response-data-content broker data)]
       (deliver-message
         broker
         (-> (message/make-message :message_type "http://puppetlabs.com/inventory_response"
@@ -598,6 +599,8 @@
 
 (def InitOptions
   {:add-websocket-handler IFn
+   :epoch s/Str
+   :version Atom
    :record-client IFn
    :find-clients IFn
    :authorization-check IFn
@@ -625,12 +628,14 @@
   (let [{:keys [broker-name
                 add-websocket-handler
                 record-client find-clients authorization-check
-                get-route
+                get-route version epoch
                 get-metrics-registry ssl-cert]} options]
     (let [broker             {:broker-name         broker-name
                               :record-client       record-client
                               :find-clients        find-clients
                               :authorization-check authorization-check
+                              :version             version
+                              :epoch               epoch
                               :metrics             {}
                               :metrics-registry    (get-metrics-registry)
                               :connections         (ConcurrentHashMap.)
