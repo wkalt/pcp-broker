@@ -662,12 +662,6 @@
           broker             (assoc broker :metrics metrics)]
       (add-websocket-handler (build-websocket-handlers broker v1-codec) {:route-id :v1})
       (add-websocket-handler (build-websocket-handlers broker default-codec) {:route-id :v2})
-      ;(try
-      ;  (when (get-route :v2)
-      ;    (add-websocket-handler (build-websocket-handlers broker default-codec) {:route-id :v2}))
-      ;  (catch IllegalArgumentException e
-      ;    (sl/maplog :trace {:type :v2-unavailable}
-      ;               (i18n/trs "v2 protocol endpoint not configured"))))
       broker)))
 
 (s/defn start
