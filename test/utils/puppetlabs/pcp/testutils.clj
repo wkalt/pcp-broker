@@ -50,7 +50,7 @@
 
    :web-router-service
    {:puppetlabs.pcp.broker.service/broker-service {:v1 "/pcp/v1.0"
-                                                   :vNext "/pcp/vNext"}
+                                                   :v2 "/pcp/v2.0"}
     :puppetlabs.trapperkeeper.services.status.status-service/status-service "/status"}
 
    :metrics {:enabled true

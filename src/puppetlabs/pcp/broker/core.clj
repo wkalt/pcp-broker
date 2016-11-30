@@ -590,7 +590,8 @@
            (.remove (:inventory broker) ws))))
 
 (s/defn build-websocket-handlers :- {s/Keyword IFn}
-  [broker :- Broker codec]
+  [broker :- Broker
+   codec]
   {:on-connect (partial on-connect! broker codec)
    :on-error   (partial on-error broker)
    :on-close   (partial on-close! broker)
@@ -627,6 +628,17 @@
                              (dissoc message :in-reply-to))]
                (message/encode message)))})
 
+(s/def v2-codec :- Codec
+  "Codec for handling v1.0 messages"
+  {:decode message/decode
+   :encode (fn [message]
+             ;; strip in-reply-to for everything but inventory_response
+             (let [message_type (:message_type message)
+                   message (if (= "http://puppetlabs.com/inventory_response" message_type)
+                             message
+                             (dissoc message :in-reply-to))]
+               (message/encode message)))})
+
 (s/defn init :- Broker
   [options :- InitOptions]
   (let [{:keys [broker-name
@@ -649,12 +661,13 @@
           metrics            (build-and-register-metrics broker)
           broker             (assoc broker :metrics metrics)]
       (add-websocket-handler (build-websocket-handlers broker v1-codec) {:route-id :v1})
-      (try
-        (when (get-route :vNext)
-          (add-websocket-handler (build-websocket-handlers broker default-codec) {:route-id :vNext}))
-        (catch IllegalArgumentException e
-          (sl/maplog :trace {:type :vnext-unavailable}
-                     (i18n/trs "vNext protocol endpoint not configured"))))
+      (add-websocket-handler (build-websocket-handlers broker default-codec) {:route-id :v2})
+      ;(try
+      ;  (when (get-route :v2)
+      ;    (add-websocket-handler (build-websocket-handlers broker default-codec) {:route-id :v2}))
+      ;  (catch IllegalArgumentException e
+      ;    (sl/maplog :trace {:type :v2-unavailable}
+      ;               (i18n/trs "v2 protocol endpoint not configured"))))
       broker)))
 
 (s/defn start

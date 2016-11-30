@@ -44,7 +44,7 @@
 
    :web-router-service
    {:puppetlabs.pcp.broker.service/broker-service {:v1 "/pcp/v1.0"
-                                                   :vNext "/pcp/vNext"}
+                                                   :v2 "/pcp/v2.0"}
     :puppetlabs.trapperkeeper.services.status.status-service/status-service "/status"}
 
    :metrics {:enabled true
@@ -52,7 +52,7 @@
 
 (def protocol-versions
   "The short names of protocol versions"
-  ["v1.0" "vNext"])
+  ["v1.0" "v2.0"])
 
 <<<<<<< HEAD
 (def broker-services
@@ -66,7 +66,7 @@
     (let [connected (promise)]
       (with-open [client (client/http-client-with-cert "client01.example.com")
                   ws     (http/websocket client
-                                         "wss://127.0.0.1:8143/pcp/vNext"
+                                         "wss://127.0.0.1:8143/pcp/v2.0"
                                          :open (fn [ws] (deliver connected true)))]
         (is (= true (deref connected (* 2 1000) false)) "Connected within 2 seconds")))))
 
@@ -75,7 +75,7 @@
     (let [closed (promise)]
       (with-open [client (http/create-client)
                   ws (http/websocket client
-                                     "wss://127.0.0.1:8143/pcp/vNext"
+                                     "wss://127.0.0.1:8143/pcp/v2.0"
                                      :close (fn [ws code reason] (deliver closed code)))]
         ;; NOTE(richardc): This test should only check for close-code 4003, but it
         ;; is a little unreliable and so may sometimes yield the close-code 1006 due
@@ -99,7 +99,7 @@
     (try+
      (with-open [client (client/http-client-with-cert "client01.example.com")
                  ws (http/websocket client
-                                    "wss://127.0.0.1:8143/pcp/vNext"
+                                    "wss://127.0.0.1:8143/pcp/v2.0"
                                     :open (fn [ws] (deliver connected true))
                                     :close (fn [ws code reason]
                                              (deliver connected false)
@@ -596,14 +596,14 @@
   (with-broker
     (is (zero? @(:version *broker*)))
     (with-open [con (client/connect :certname "client01.example.com"
-                                    :version "vNext")]
+                                    :version "v2.0")]
       (is (= 1 @(:version *broker*))))
     (is (= 2 @(:version *broker*)))))
 
 (deftest interversion-send-test
   (with-broker
-    (dotestseq [sender-version   ["v1.0" "vNext" "v1.0" "vNext"]
-                receiver-version ["v1.0" "v1.0" "vNext" "vNext"]]
+    (dotestseq [sender-version   ["v1.0" "v2.0" "v1.0" "v2.0"]
+                receiver-version ["v1.0" "v1.0" "v2.0" "v2.0"]]
       (with-open [sender   (client/connect :certname "client01.example.com"
                                            :version sender-version)
                   receiver (client/connect :certname "client02.example.com"
@@ -623,13 +623,3 @@
                    (:in-reply-to received-msg)))
             (is (= "greeting" (:message_type received-msg)))
             (is (= "Hello" (message/get-json-data received-msg)))))))))
-
-(def no-vnext-config
-  "A broker with vNext unconfigured"
-  (assoc-in broker-config [:web-router-service :puppetlabs.pcp.broker.service/broker-service]
-            {:v1 "/pcp/v1.0"}))
-
-(deftest no-vnext-test
-  (call-with-broker
-    no-vnext-config
-    (fn [] (is true))))

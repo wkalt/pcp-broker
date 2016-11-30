@@ -52,7 +52,7 @@
       :or {modify-association identity
            modify-association-encoding identity
            check-association true
-           version "vNext"}}]
+           version "v2.0"}}]
   (let [uri                 (or uri (str "pcp://" certname "/test"))
         association-request (modify-association (make-association-request uri))
         client              (http-client-with-cert certname)
