@@ -28,6 +28,8 @@
    :uri-map            ConcurrentHashMap ;; Mapping of Uri to Websocket, for sending
    :connections        ConcurrentHashMap ;; Mapping of Websocket session to Connection state
    :inventory          ConcurrentHashMap ;; Mapping of Uri to websocket session
+   :version            Atom
+   :epoch              s/Str
    :metrics-registry   Object
    :metrics            {s/Keyword Object}
    :state              Atom})
@@ -93,6 +95,7 @@
   [broker :- Broker ws :- Websocket codec :- Codec]
   (let [connection (connection/make-connection ws codec)]
     (.put (:connections broker) ws connection)
+    (swap! (:version broker) inc)
     connection))
 
 (s/defn remove-connection!
@@ -100,6 +103,7 @@
   [broker :- Broker ws :- Websocket]
   (if-let [uri (get-in (:connections broker) [ws :uri])]
     (.remove (:uri-map broker) uri))
+  (swap! (:version broker) inc)
   (.remove (:connections broker) ws))
 
 (s/defn get-connection :- (s/maybe Connection)
@@ -306,7 +310,6 @@
    connection :- Connection]
   (assert (= (:state connection) :associated))
   (let [data (message/get-json-data message)]
-    (println "DATA IS" data)
     (s/validate p/InventoryRequest data)
     (let [response-data (make-inventory_response-data-content broker data)]
       (deliver-message

@@ -23,14 +23,14 @@
                 :authorization-check (constantly true)
                 :uri-map             (ConcurrentHashMap.)
                 :connections         (ConcurrentHashMap.)
+                :inventory           (ConcurrentHashMap.)
                 :metrics-registry    metrics.core/default-registry
                 :epoch               (ks/uuid)
                 :version             (atom 0)
                 :metrics             {}
                 :state               (atom :running)}
-        metrics (build-and-register-metrics broker)
-        broker (assoc broker :metrics metrics)]
-    broker))
+        metrics (build-and-register-metrics broker)]
+    (assoc broker :metrics metrics)))
 
 (s/def identity-codec :- Codec
   {:encode identity
@@ -307,9 +307,10 @@
     (with-redefs
       [puppetlabs.pcp.broker.core/deliver-message (fn [broker message connection]
                                                     (reset! accepted message))]
-      (let [outcome (process-inventory-request broker message connection)]
+      (let [outcome (process-inventory-request broker message connection)
+            json-data (message/get-json-data @accepted)]
         (is (nil? outcome))
-        (is (= [] (:uris (message/get-json-data @accepted))))))))
+        (is (= [] (:uris json-data)))))))
 
 (deftest process-server-message!-test
   (let [broker (make-test-broker)
