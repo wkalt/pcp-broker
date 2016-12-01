@@ -210,7 +210,9 @@
 (s/defn reason-to-deny-association :- (s/maybe s/Str)
   "Returns an error message describing why the session should not be
   allowed, if it should be denied"
-  [broker :- Broker connection :- Connection as :- p/Uri]
+  [broker :- Broker
+   connection :- Connection
+   as :- p/Uri]
   (let [[_ type] (p/explode-uri as)]
     (cond
       (= type "server")
@@ -248,7 +250,9 @@
   from the 'connections' map, nor the 'uri-map'. It is assumed that such update
   will be done asynchronously by the onClose handler."
   ;; TODO(ale): make associate_request idempotent when succeed (PCP-521)
-  ([broker :- Broker message :- Message connection :- Connection]
+  ([broker :- Broker
+    message :- Message
+    connection :- Connection]
     (let [requester-uri (:sender message)
           reason-to-deny (reason-to-deny-association broker connection requester-uri)]
       (process-associate-request! broker message connection reason-to-deny)))
@@ -450,7 +454,9 @@
   to the specified 'Websocket' in case it gets modified (hence the '!' in the
   function name), otherwise nil.
   Also, log the message validation outcome via 'pcp-access' logger."
-  [broker :- Broker bytes :- message/ByteArray ws :- (s/maybe Websocket)]
+  [broker :- Broker
+   bytes :- message/ByteArray
+   ws :- (s/maybe Websocket)]
   (let [connection (get-connection broker ws)
         decode (get-in connection [:codec :decode])]
     (try+
@@ -614,14 +620,16 @@
    (s/optional-key :broker-name) s/Str})
 
 (s/def v1-codec :- Codec
-  "Codec for handling v1.0 messages"
+  "Codec for handling v1.0 messages. Strip out :in-reply-to for all messages
+   except inventory responses, and append the agent client_type to messages
+   that do not specify a client_type."
   {:decode message/decode
    :encode (fn [message]
-             ;; strip in-reply-to for everything but inventory_response
              (let [message_type (:message_type message)
-                   message (if (= "http://puppetlabs.com/inventory_response" message_type)
-                             message
-                             (dissoc message :in-reply-to))]
+                   [_ type] (p/explode-uri (:sender message))
+                   message (cond-> message
+                             (not= "http://puppetlabs.com/inventory_response" message_type) (dissoc :in-reply-to)
+                             (nil? type) (update :sender str "/agent"))]
                (message/encode message)))})
 
 (s/def v2-codec :- Codec
