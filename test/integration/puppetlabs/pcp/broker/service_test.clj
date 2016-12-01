@@ -20,7 +20,8 @@
             [slingshot.slingshot :refer [throw+ try+]]
             [schema.test :as st]))
 
-(def inventory-version-regex #"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}_\d+$")
+(def inventory-version-regex
+  #"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}_\d+$")
 
 (def broker-config
   "A broker with ssl and own spool"

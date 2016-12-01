@@ -613,10 +613,6 @@
    :get-route IFn
    (s/optional-key :broker-name) s/Str})
 
-(s/def default-codec :- Codec
-  {:decode message/decode
-   :encode message/encode})
-
 (s/def v1-codec :- Codec
   "Codec for handling v1.0 messages"
   {:decode message/decode
@@ -629,15 +625,8 @@
                (message/encode message)))})
 
 (s/def v2-codec :- Codec
-  "Codec for handling v1.0 messages"
   {:decode message/decode
-   :encode (fn [message]
-             ;; strip in-reply-to for everything but inventory_response
-             (let [message_type (:message_type message)
-                   message (if (= "http://puppetlabs.com/inventory_response" message_type)
-                             message
-                             (dissoc message :in-reply-to))]
-               (message/encode message)))})
+   :encode message/encode})
 
 (s/defn init :- Broker
   [options :- InitOptions]
@@ -661,7 +650,7 @@
           metrics            (build-and-register-metrics broker)
           broker             (assoc broker :metrics metrics)]
       (add-websocket-handler (build-websocket-handlers broker v1-codec) {:route-id :v1})
-      (add-websocket-handler (build-websocket-handlers broker default-codec) {:route-id :v2})
+      (add-websocket-handler (build-websocket-handlers broker v2-codec) {:route-id :v2})
       broker)))
 
 (s/defn start
