@@ -3,7 +3,11 @@
             [clojure.tools.logging :as log]
             [http.async.client :as http]
             [me.raynes.fs :as fs]
-            [puppetlabs.pcp.testutils :refer [dotestseq with-broker call-with-broker *broker*]]
+            [puppetlabs.pcp.testutils :refer [dotestseq
+                                              with-broker
+                                              call-with-broker
+                                              *broker*
+                                              broker-config]]
             [puppetlabs.pcp.testutils.client :as client]
             [puppetlabs.pcp.message :as message]
             [puppetlabs.kitchensink.core :as ks]
@@ -22,34 +26,6 @@
 
 (def inventory-version-regex
   #"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}_\d+$")
-
-(def broker-config
-  "A broker with ssl and own spool"
-  {:authorization {:version 1
-                   :rules [{:name "allow all"
-                            :match-request {:type "regex"
-                                            :path "^/.*$"}
-                            :allow-unauthenticated true
-                            :sort-order 1}]}
-
-   :webserver {:ssl-host "127.0.0.1"
-               ;; usual port is 8142.  Here we use 8143 so if we're developing
-               ;; we can run a long-running instance and this one for the
-               ;; tests.
-               :ssl-port 8143
-               :client-auth "want"
-               :ssl-key "./test-resources/ssl/private_keys/broker.example.com.pem"
-               :ssl-cert "./test-resources/ssl/certs/broker.example.com.pem"
-               :ssl-ca-cert "./test-resources/ssl/ca/ca_crt.pem"
-               :ssl-crl-path "./test-resources/ssl/ca/ca_crl.pem"}
-
-   :web-router-service
-   {:puppetlabs.pcp.broker.service/broker-service {:v1 "/pcp/v1.0"
-                                                   :v2 "/pcp/v2.0"}
-    :puppetlabs.trapperkeeper.services.status.status-service/status-service "/status"}
-
-   :metrics {:enabled true
-             :server-id "localhost"}})
 
 (def protocol-versions
   "The short names of protocol versions"

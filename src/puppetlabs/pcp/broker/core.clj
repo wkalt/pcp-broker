@@ -632,39 +632,42 @@
   [options :- InitOptions]
   (let [{:keys [broker-name
                 add-websocket-handler
-                record-client find-clients authorization-check
+                record-client
+                find-clients
+                authorization-check
                 get-route version epoch
-                get-metrics-registry ssl-cert]} options]
-    (let [broker             {:broker-name         broker-name
-                              :record-client       record-client
-                              :find-clients        find-clients
-                              :authorization-check authorization-check
-                              :version             version
-                              :epoch               epoch
-                              :metrics             {}
-                              :metrics-registry    (get-metrics-registry)
-                              :connections         (ConcurrentHashMap.)
-                              :uri-map             (ConcurrentHashMap.)
-                              :inventory           (ConcurrentHashMap.)
-                              :state               (atom :starting)}
-          metrics            (build-and-register-metrics broker)
-          broker             (assoc broker :metrics metrics)]
-      (add-websocket-handler (build-websocket-handlers broker v1-codec) {:route-id :v1})
-      (add-websocket-handler (build-websocket-handlers broker v2-codec) {:route-id :v2})
-      broker)))
+                get-metrics-registry ssl-cert]} options
+        broker {:broker-name broker-name
+                :record-client record-client
+                :find-clients find-clients
+                :authorization-check authorization-check
+                :version version
+                :epoch epoch
+                :metrics {}
+                :metrics-registry (get-metrics-registry)
+                :connections (ConcurrentHashMap.)
+                :uri-map (ConcurrentHashMap.)
+                :inventory (ConcurrentHashMap.)
+                :state (atom :starting)}
+        metrics (build-and-register-metrics broker)
+        broker (assoc broker :metrics metrics)]
+    (add-websocket-handler
+      (build-websocket-handlers broker v1-codec) {:route-id :v1})
+    (add-websocket-handler
+      (build-websocket-handlers broker v2-codec) {:route-id :v2})
+    broker))
 
 (s/defn start
-  [broker :- Broker]
-  (let [{:keys [state]} broker]
-    (reset! state :running)))
+  [{:keys [state]} :- Broker]
+  (reset! state :running))
 
 (s/defn stop
-  [broker :- Broker]
-  (let [{:keys [state]} broker]
-    (reset! state :stopping)))
+  [{:keys [state]} :- Broker]
+  (reset! state :stopping))
 
 (s/defn status :- status-core/StatusCallbackResponse
-  [broker :- Broker level :- status-core/ServiceStatusDetailLevel]
+  [broker :- Broker
+   level :- status-core/ServiceStatusDetailLevel]
   (let [{:keys [state metrics-registry]} broker
         level>= (partial status-core/compare-levels >= level)]
     {:state  @state
