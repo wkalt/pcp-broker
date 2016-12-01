@@ -29,7 +29,6 @@
    :connections        ConcurrentHashMap ;; Mapping of Websocket session to Connection state
    :inventory          ConcurrentHashMap ;; Mapping of Uri to websocket session
    :version            Atom
-   :epoch              s/Str
    :metrics-registry   Object
    :metrics            {s/Keyword Object}
    :state              Atom})
@@ -300,10 +299,10 @@
             :state :associated))))))
 
 (s/defn make-inventory_response-data-content :- p/InventoryResponse
-  [{:keys [find-clients epoch version] :as broker} {:keys [query]}]
+  [{:keys [find-clients version] :as broker} {:keys [query]}]
   (let [uris (doall (filter (partial get-websocket broker) (find-clients query)))]
     {:uris uris
-     :version (str epoch "_" @version)}))
+     :version @version}))
 
 (s/defn process-inventory-request
   "Process a request for inventory data.
@@ -610,7 +609,6 @@
 
 (def InitOptions
   {:add-websocket-handler IFn
-   :epoch s/Str
    :version Atom
    :record-client IFn
    :find-clients IFn
@@ -643,14 +641,13 @@
                 record-client
                 find-clients
                 authorization-check
-                get-route version epoch
+                get-route version
                 get-metrics-registry ssl-cert]} options
         broker {:broker-name broker-name
                 :record-client record-client
                 :find-clients find-clients
                 :authorization-check authorization-check
                 :version version
-                :epoch epoch
                 :metrics {}
                 :metrics-registry (get-metrics-registry)
                 :connections (ConcurrentHashMap.)

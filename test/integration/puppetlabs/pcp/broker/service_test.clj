@@ -24,9 +24,6 @@
             [slingshot.slingshot :refer [throw+ try+]]
             [schema.test :as st]))
 
-(def inventory-version-regex
-  #"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}_\d+$")
-
 (def protocol-versions
   "The short names of protocol versions"
   ["v1.0" "v2.0"])
@@ -322,7 +319,7 @@
             (is (= "http://puppetlabs.com/inventory_response" (:message_type response)))
             (is (= (:id request) (:in-reply-to response)))
             (is (= ["pcp://client01.example.com/test"] (:uris json-data)))
-            (is (re-matches inventory-version-regex (:version json-data)))))))))
+            (is (integer? (:version json-data)))))))))
 
 (deftest inventory-node-can-find-itself-wildcard-test
   (with-broker
@@ -340,7 +337,7 @@
                 {:keys [uris version]} (message/get-json-data response)]
             (is (= "http://puppetlabs.com/inventory_response" (:message_type response)))
             (is (= ["pcp://client01.example.com/test"] uris))
-            (is (re-matches inventory-version-regex version))))))))
+            (is (integer? version))))))))
 
 (deftest inventory-node-cannot-find-previously-connected-node-test
   (with-broker
@@ -360,7 +357,7 @@
               {:keys [uris version]} (message/get-json-data response)]
           (is (= "http://puppetlabs.com/inventory_response" (:message_type response)))
           (is (= [] uris))
-          (is (re-matches inventory-version-regex version)))))))
+          (is (integer? version)))))))
 
 (def no-inventory-broker-config
   "A broker that allows connections but no inventory requests"
