@@ -206,14 +206,6 @@
   (and (= (:targets message) ["pcp:///server"])
        (= (:message_type message) "http://puppetlabs.com/associate_request")))
 
-;; process-associate-request! helper
-
-(s/defn make-associate_response-data-content :- p/AssociateResponse
-  [id reason-to-deny]
-  (if reason-to-deny
-    {:id id :success false :reason reason-to-deny}
-    {:id id :success true}))
-
 (s/defn associate-response :- p/AssociateResponse
   [id sender]
   (let [response-data {:id id :success true}]
