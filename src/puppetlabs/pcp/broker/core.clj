@@ -1,7 +1,7 @@
 (ns puppetlabs.pcp.broker.core
   (:require [metrics.gauges :as gauges]
             [puppetlabs.experimental.websockets.client :as websockets-client]
-            [puppetlabs.pcp.broker.connection :as connection :refer [Websocket Codec ConnectionState]]
+            [puppetlabs.pcp.broker.connection :as connection :refer [Websocket Codec]]
             [puppetlabs.pcp.broker.metrics :as metrics]
             [puppetlabs.pcp.message :as message :refer [Message]]
             [puppetlabs.pcp.protocol :as p]
@@ -248,11 +248,7 @@
     (let [{:keys [uri-map record-client]} broker]
       (.put uri-map requester-uri ws)
       (record-client requester-uri)
-      (assoc connection
-             :uri requester-uri
-             :state :associated)
-      )
-    ))
+      (assoc connection :uri requester-uri))))
 
 (s/defn make-inventory_response-data-content :- p/InventoryResponse
   [{:keys [find-clients version] :as broker} {:keys [query]}]
@@ -267,7 +263,6 @@
   [broker :- Broker
    message :- Message
    connection :- Connection]
-  (assert (= (:state connection) :associated))
   (let [data (message/get-json-data message)]
     (s/validate p/InventoryRequest data)
     (let [response-data (make-inventory_response-data-content broker data)]
@@ -371,8 +366,7 @@
 
 (def MessageValidationOutcome
   "Outcome of validate-message"
-  (s/enum :to-be-ignored-during-association
-          :not-authenticated
+  (s/enum :not-authenticated
           :not-authorized
           :multicast-unsupported
           :to-be-processed))
@@ -387,8 +381,6 @@
    connection :- Connection
    is-association-request :- s/Bool]
   (cond
-    (and (= :open (:state connection))
-         (not is-association-request)) :to-be-ignored-during-association
     (not (authenticated? message connection)) :not-authenticated
     (not (authorized? broker message connection)) :not-authorized
     (multicast-message? message) :multicast-unsupported
@@ -424,10 +416,9 @@
             is-association-request (session-association-request? message)]
         (sl/maplog :trace {:type :incoming-message-trace :rawmsg message}
                    (i18n/trs "Processing PCP message: '{rawmsg}'"))
+
         (try+
           (case (validate-message broker message connection is-association-request)
-            :to-be-ignored-during-association
-            (log-access :warn (assoc message-data :accessoutcome "IGNORED_DURING_ASSOCIATION"))
             :not-authenticated
             (let [not-authenticated-msg (i18n/trs "Message not authenticated")]
               (log-access :warn (assoc message-data :accessoutcome "AUTHENTICATION_FAILURE"))
@@ -452,10 +443,7 @@
               (log-access :info (assoc message-data :accessoutcome "AUTHORIZATION_SUCCESS"))
               (if (= (:targets message) ["pcp:///server"])
                 (process-server-message! broker message connection)
-                (do
-                  (assert (= (:state connection) :associated))
-                  (deliver-message broker message connection)
-                  nil)))
+                (deliver-message broker message connection)))
             ;; default case
             (assert false (i18n/trs "unexpected message validation outcome")))
           (catch map? m

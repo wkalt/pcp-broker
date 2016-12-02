@@ -86,7 +86,7 @@
   (testing "It should add a connection to the connection map"
     (let [broker (make-test-broker)]
       (add-connection! broker "ws" identity-codec)
-      (is (= (get-in (:connections broker) ["ws" :state]) :open)))))
+      (is (get (:connections broker) "ws")))))
 
 (deftest remove-connection!-test
   (testing "It should remove a connection from the connection map"
@@ -243,7 +243,6 @@
         message (-> (message/make-message :sender "pcp://test.example.com/test")
                     (message/set-json-data  {:query ["pcp://*/*"]}))
         connection (connection/make-connection "ws1" identity-codec)
-        connection (assoc connection :state :associated)
         accepted (atom nil)]
     (with-redefs
       [puppetlabs.pcp.broker.core/deliver-message (fn [broker message connection]
@@ -294,13 +293,7 @@
      :params         params}))
 
 (deftest validate-message-test
-  (testing "ignores messages other than associate_request if connection not associated"
-    (let [broker (make-test-broker)
-          message (message/make-message)
-          connection (dummy-connection-from "localpost")
-          is-association-request false]
-      (is (= :to-be-ignored-during-association
-             (validate-message broker message connection is-association-request)))))
+
   (testing "correctly marks not authenticated messages"
     (let [broker (make-test-broker)
           msg (message/make-message :sender "pcp://localpost/office"
@@ -376,7 +369,7 @@
           (is (= the-uuid (:id msg-data)))
           (is (= error-description (:description msg-data))))))))
 
-(deftest process-message!-test
+(deftest process-message-test
   (with-redefs [puppetlabs.pcp.broker.core/make-ring-request make-valid-ring-request]
     (testing "sends an error message and returns nil, in case it fails to deserialize"
       (let [broker (assoc (make-test-broker) :authorization-check yes-authorization-check)
@@ -398,7 +391,7 @@
             (let [outcome (process-message! broker (byte-array raw-message) nil)]
               (is (= "Could not decode message" @error-message-description))
               (is (nil? outcome)))))))
-    (testing "delivers message in case of expired msg (not associate_session)"
+    (testing "processes message in case of expired msg (not associate_session)"
       (let [broker (assoc (make-test-broker)
                      :authorization-check yes-authorization-check)
             called-accept-message (atom false)
@@ -408,8 +401,7 @@
                     (message/set-expiry 5 :seconds))
             raw-msg (message/encode msg)
             connection (merge (dummy-connection-from "host_a")
-                              {:state :associated
-                               :codec {:decode (fn [bytes] msg)
+                              {:codec {:decode (fn [bytes] msg)
                                        :encode (fn [msg] raw-msg)}})]
         (.put (:connections broker) "ws1" connection)
         (with-redefs [puppetlabs.pcp.broker.core/get-connection
@@ -418,7 +410,7 @@
                       (fn [broker message connection] (reset! called-accept-message true))]
           (let [outcome (process-message! broker raw-msg nil)]
             (is @called-accept-message)
-            (is (nil? outcome))))))
+            (is (true? outcome))))))
     (testing "sends an error message and returns nil in case of authentication failure"
       (let [broker (make-test-broker)
             error-message-description (atom nil)
@@ -428,13 +420,13 @@
                     (message/set-expiry 5 :seconds))
             raw-msg (message/encode msg)
             connection (merge (dummy-connection-from "wire")
-                              {:state :associated
-                               :codec {:decode (fn [bytes] msg)
+                              {:codec {:decode (fn [bytes] msg)
                                        :encode (fn [msg] raw-msg)}})]
         (with-redefs [puppetlabs.pcp.broker.core/get-connection
                       (fn [broker ws] connection)
                       puppetlabs.pcp.broker.core/send-error-message
-                      (fn [msg description connection] (reset! error-message-description description) nil)]
+                      (fn [msg description connection]
+                        (reset! error-message-description description) nil)]
           (let [outcome (process-message! broker (byte-array raw-msg) nil)]
             (is (= "Message not authenticated" @error-message-description))
             (is (nil? outcome))))))
@@ -448,8 +440,7 @@
                     (message/set-expiry 5 :seconds))
             raw-msg (message/encode msg)
             connection (merge (dummy-connection-from "thegunclub")
-                              {:state :associated
-                               :codec {:decode (fn [bytes] msg)
+                              {:codec {:decode (fn [bytes] msg)
                                        :encode (fn [msg] raw-msg)}})]
         (with-redefs [puppetlabs.pcp.broker.core/get-connection
                       (fn [broker ws] connection)
@@ -468,8 +459,7 @@
                     (message/set-expiry 5 :seconds))
             raw-msg (message/encode msg)
             connection (merge (dummy-connection-from "thegunclub")
-                              {:state :associated
-                               :codec {:decode (fn [bytes] msg)
+                              {:codec {:decode (fn [bytes] msg)
                                        :encode (fn [msg] raw-msg)}})]
         (with-redefs [puppetlabs.pcp.broker.core/get-connection
                       (fn [broker ws] connection)
@@ -488,13 +478,13 @@
                     (message/set-expiry 5 :seconds))
             raw-msg (message/encode msg)
             connection (merge (dummy-connection-from "thegunclub")
-                              {:state :associated
-                               :codec {:decode (fn [bytes] msg)
+                              {:codec {:decode (fn [bytes] msg)
                                        :encode (fn [msg] raw-msg)}})]
         (with-redefs [puppetlabs.pcp.broker.core/get-connection
                       (fn [broker ws] connection)
                       puppetlabs.pcp.broker.core/send-error-message
-                      (fn [msg description connection] (reset! error-message-description description) nil)]
+                      (fn [msg description connection]
+                        (reset! error-message-description description) nil)]
           (let [outcome (process-message! broker (byte-array raw-msg) nil)]
             (is (= "Multiple recipients no longer supported" @error-message-description))
             (is (nil? outcome))))))
@@ -508,8 +498,7 @@
                     (message/set-expiry 5 :seconds))
             raw-msg (message/encode msg)
             connection (merge (dummy-connection-from "gangoffour")
-                              {:state :associated
-                               :codec {:decode (fn [bytes] msg)
+                              {:codec {:decode (fn [bytes] msg)
                                        :encode (fn [msg] raw-msg)}})]
         (with-redefs [puppetlabs.pcp.broker.core/get-connection
                       (fn [broker ws] connection)
@@ -517,4 +506,4 @@
                       (fn [broker message connection] (reset! accepted-message-for-delivery true))]
           (let [outcome (process-message! broker (byte-array raw-msg) nil)]
             (is @accepted-message-for-delivery)
-            (is (nil? outcome))))))))
+            (is (true? outcome))))))))

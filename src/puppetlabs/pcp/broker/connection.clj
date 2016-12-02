@@ -11,10 +11,6 @@
   "Schema for a websocket session"
   Object)
 
-(def ConnectionState
-  "The states it is possible for a Connection to be in"
-  (s/enum :open))
-
 (def Codec
   "Message massaging functions"
   {:decode IFn
@@ -28,8 +24,7 @@
 (declare -summarize)
 
 (s/defrecord Connection
-             [state :- ConnectionState
-              websocket :- Websocket
+             [websocket :- Websocket
               remote-address :- s/Str
               created-at :- p/ISO8601
               codec :- Codec
@@ -48,8 +43,7 @@
   [websocket :- Websocket codec :- Codec]
   ;; NOTE(ale): the 'map->...' constructor comes from schema.core's defrecord
   (map->Connection
-    {:state          :open
-     :websocket      websocket
+    {:websocket      websocket
      :codec          codec
      ;; NOTE(ale): Extract IP address and port out of the string representation
      ;; of the InetAddress instance ('hostname/socket' format), so that we
