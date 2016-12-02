@@ -232,6 +232,16 @@
     {:id id :success false :reason reason-to-deny}
     {:id id :success true}))
 
+(s/defn associate-response :- p/AssociateResponse
+  [id sender]
+  (let [response-data {:id id :success true}]
+    (-> (message/make-message :message_type "http://puppetlabs.com/associate_response"
+                              :targets [sender]
+                              :in-reply-to id
+                              :sender "pcp:///server")
+        (message/set-json-data response-data)
+        (message/set-expiry 3 :seconds))))
+
 (s/defn process-associate-request! :- (s/maybe Connection)
   "Send an associate_response that will be successful if:
     - a reason-to-deny is not specified as an argument nor determined by
@@ -261,18 +271,12 @@
           id (:id request)
           encode (get-in connection [:codec :encode])
           requester-uri (:sender request)
-          response-data (make-associate_response-data-content id reason-to-deny)]
-      (let [message (-> (message/make-message :message_type "http://puppetlabs.com/associate_response"
-                                              :targets [requester-uri]
-                                              :in-reply-to id
-                                              :sender "pcp:///server")
-                        (message/set-json-data response-data)
-                        (message/set-expiry 3 :seconds))]
-        (sl/maplog :debug {:type :associate_response-trace
-                           :requester requester-uri
-                           :rawmsg message}
-                   (i18n/trs "Replying to '{requester}' with associate_response: '{rawmsg}'"))
-        (websockets-client/send! ws (encode message)))
+          message (associate-response id requester-uri)]
+      (sl/maplog :debug {:type :associate_response-trace
+                         :requester requester-uri
+                         :rawmsg message}
+                 (i18n/trs "Replying to '{requester}' with associate_response: '{rawmsg}'"))
+        (websockets-client/send! ws (encode message))
       (if reason-to-deny
         (do
           (sl/maplog

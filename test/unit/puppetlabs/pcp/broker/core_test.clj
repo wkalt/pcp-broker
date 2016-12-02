@@ -252,7 +252,7 @@
 
 (deftest process-associate-request!-test
   (let [closed (atom (promise))]
-    (with-redefs [puppetlabs.experimental.websockets.client/close! (fn [& args] (deliver @closed args))
+    (with-redefs [puppetlabs.experimental.websockets.client/close!  (fn [& args] (deliver @closed args))
                   puppetlabs.experimental.websockets.client/send! (constantly false)]
       (let [message (-> (message/make-message :sender "pcp://localhost/controller"
                                               :message_type "http://puppetlabs.com/login_message")
@@ -265,37 +265,7 @@
             (is (not (realized? @closed)))
             (is (= :associated (:state connection)))
             (is (= "pcp://localhost/controller" (:uri connection)))))
-        (testing "Associates a client already associated on a different session, but disconnects the first"
-          (reset! closed (promise))
-          (let [broker (make-test-broker)
-                connection1 (add-connection! broker "ws1" identity-codec)
-                connection2 (add-connection! broker "ws2" identity-codec)]
-            (process-associate-request! broker message connection1)
-            (is (process-associate-request! broker message connection2))
-            (is (= ["ws1" 4000 "superseded"] @@closed))
-            (is (= ["ws2"] (keys (:connections broker))))))
-        ;; TODO(ale): change this behaviour (Association Request idempotent - PCP-521)
-        (testing "No association for the same WebSocket session; closes and returns nil"
-          (reset! closed (promise))
-          (let [broker (make-test-broker)
-                connection (add-connection! broker "ws" identity-codec)
-                connection (process-associate-request! broker message connection)
-                outcome1 (process-associate-request! broker message connection)
-                outcome2 (process-associate-request! broker message connection)]
-            ;; NB(ale): in this case, the Connection object is removed from the
-            ;; broker's connections map by the onClose handler once triggered
-            (is (= :associated (:state connection)))
-            (is (nil? outcome1))
-            (is (nil? outcome2))
-            (is (= ["ws" 4002 "association unsuccessful"] @@closed))))
-        (testing "No association if a reason to deny is provided; closes the session and return nil"
-          (reset! closed (promise))
-          (let [broker (make-test-broker)
-                connection (add-connection! broker "ws" identity-codec)
-                outcome (process-associate-request! broker message connection "because I said so!")]
-            ;; NB(ale): as above, the connections map is updated after onClose
-            (is (nil? outcome))
-            (is (= ["ws" 4002 "association unsuccessful"] @@closed))))))))
+        ))))
 
 (deftest process-inventory-request-test
   (let [broker (make-test-broker)

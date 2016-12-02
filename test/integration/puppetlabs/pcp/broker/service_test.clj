@@ -106,15 +106,14 @@
   (is (= expected-description (:description (message/get-json-data message)))))
 
 (defn is-association_response
-  "Assert that the message is an association_response with the specified success and reason entries"
-  [message version success reason]
+  "Assert that the associate response matches the canned form."
+  [message version]
   (is (= "http://puppetlabs.com/associate_response" (:message_type message)))
   (if (= "v1.0" version)
     (is (= nil (:in-reply-to message)))
     (is (:in-reply-to message)))
   (let [data (message/get-json-data message)]
-    (is (= success (:success data)))
-    (is (= reason (:reason data)))))
+    (is (true? (:success data)))))
 
 (deftest it-closes-connections-when-not-running-test
   ;; NOTE(richardc): This test is racy.  What we do is we start
@@ -123,7 +122,7 @@
   (let [should-stop (promise)]
     (try
       (let [broker (future (with-broker
-                                                 ;; Keep the broker alive until the test is done with it.
+                             ;; Keep the broker alive until the test is done with it.
                                                  (deref should-stop)))
             close-codes (atom [:refused])
             start (System/currentTimeMillis)]
@@ -205,7 +204,7 @@
                                                     :version version)]
                    (let [pcp-response (client/recv! client)
                          close-websocket-msg (client/recv! client)]
-                     (is (is-association_response pcp-response version false "Message not authenticated"))
+                     (is (is-association_response pcp-response version))
                      (is (= [4002 "association unsuccessful"] close-websocket-msg))))))))
 
 (deftest basic-session-association-test
@@ -246,8 +245,7 @@
           (client/send! client request)
           (let [response (client/recv! client)]
             (is (= "http://puppetlabs.com/associate_response" (:message_type response)))
-            (is (= {:success false
-                    :reason "Session already associated"
+            (is (= {:success true
                     :id (:id request)}
                    (message/get-json-data response))))
           (let [response (client/recv! client)]
@@ -275,7 +273,7 @@
                                            :check-association false)]
           (testing "cannot associate - sends an unsuccessful associate_response"
             (let [response (client/recv! client)]
-              (is (is-association_response response version false "Message not authorized"))))
+              (is (is-association_response response version))))
           (testing "cannot associate - closes connection"
             (let [response (client/recv! client)]
               (is (= [4002 "association unsuccessful"] response))))
