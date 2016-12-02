@@ -206,7 +206,7 @@
   (and (= (:targets message) ["pcp:///server"])
        (= (:message_type message) "http://puppetlabs.com/associate_request")))
 
-(s/defn associate-response :- p/AssociateResponse
+(s/defn canned-associate-response :- p/AssociateResponse
   [id sender]
   (let [response-data {:id id :success true}]
     (-> (message/make-message :message_type "http://puppetlabs.com/associate_response"
@@ -239,7 +239,7 @@
         id (:id request)
         encode (get-in connection [:codec :encode])
         requester-uri (:sender request)
-        message (associate-response id requester-uri)]
+        message (canned-associate-response id requester-uri)]
     (sl/maplog :debug {:type :associate_response-trace
                        :requester requester-uri
                        :rawmsg message}
