@@ -13,7 +13,7 @@
 
 (def ConnectionState
   "The states it is possible for a Connection to be in"
-  (s/enum :open :associated))
+  (s/enum :open))
 
 (def Codec
   "Message massaging functions"

@@ -238,35 +238,6 @@
                              :message_type "http://puppetlabs.com/associate_request"))]
       (is (= false (session-association-request? message))))))
 
-(deftest reason-to-deny-association-test
-  (let [broker     (make-test-broker)
-        connection (connection/make-connection "websocket" identity-codec)
-        associated (assoc connection :state :associated :uri "pcp://test/foo")]
-    (is (= nil (reason-to-deny-association broker connection "pcp://test/foo")))
-    (is (= "'server' type connections not accepted"
-           (reason-to-deny-association broker connection "pcp://test/server")))
-    (is (= "Session already associated"
-           (reason-to-deny-association broker associated "pcp://test/foo")))
-    (is (= "Session already associated"
-           (reason-to-deny-association broker associated "pcp://test/bar")))))
-
-(deftest process-associate-request!-test
-  (let [closed (atom (promise))]
-    (with-redefs [puppetlabs.experimental.websockets.client/close!  (fn [& args] (deliver @closed args))
-                  puppetlabs.experimental.websockets.client/send! (constantly false)]
-      (let [message (-> (message/make-message :sender "pcp://localhost/controller"
-                                              :message_type "http://puppetlabs.com/login_message")
-                        (message/set-expiry 3 :seconds))]
-        (testing "It should return an associated Connection if there's no reason to deny association"
-          (reset! closed (promise))
-          (let [broker     (make-test-broker)
-                connection (add-connection! broker "ws" identity-codec)
-                connection (process-associate-request! broker message connection)]
-            (is (not (realized? @closed)))
-            (is (= :associated (:state connection)))
-            (is (= "pcp://localhost/controller" (:uri connection)))))
-        ))))
-
 (deftest process-inventory-request-test
   (let [broker (make-test-broker)
         message (-> (message/make-message :sender "pcp://test.example.com/test")

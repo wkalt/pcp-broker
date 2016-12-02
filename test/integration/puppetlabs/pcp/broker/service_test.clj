@@ -195,7 +195,8 @@
             (is (nil? response))))))))
 
 (deftest certificate-must-match-for-authentication-test
-  (testing "Unsuccessful associate_response and WebSocket closes if client not authenticated"
+  (testing
+    "Unsuccessful associate_response and WebSocket closes if client not authenticated"
     (with-broker
       (dotestseq [version protocol-versions]
                  (with-open [client (client/connect :certname "client01.example.com"
@@ -204,8 +205,7 @@
                                                     :version version)]
                    (let [pcp-response (client/recv! client)
                          close-websocket-msg (client/recv! client)]
-                     (is (is-association_response pcp-response version))
-                     (is (= [4002 "association unsuccessful"] close-websocket-msg))))))))
+                     (is (is-association_response pcp-response version))))))))
 
 (deftest basic-session-association-test
   (with-broker
@@ -224,79 +224,6 @@
         (let [response (client/recv! client)]
           (is (= "http://puppetlabs.com/associate_response" (:message_type response))))))))
 
-(deftest second-association-new-connection-closes-first-test
-  (with-broker
-    (dotestseq [version protocol-versions]
-      (with-open [first-client (client/connect :certname "client01.example.com"
-                                               :version version)
-                  second-client (client/connect :certname "client01.example.com"
-                                                :version version)]
-        ;; NB(ale): client/connect checks associate_response for both clients
-        (let [close-websocket-msg1 (client/recv! first-client)]
-          (is (= [4000 "superseded"] close-websocket-msg1)))))))
-
-;; TODO(ale): change this (PCP-521 - association_request idempotent)
-(deftest second-association-same-connection-should-fail-and-disconnect-test
-  (with-broker
-    (dotestseq [version protocol-versions]
-      (with-open [client (client/connect :certname "client01.example.com"
-                                         :version version)]
-        (let [request (client/make-association-request "pcp://client01.example.com/test")]
-          (client/send! client request)
-          (let [response (client/recv! client)]
-            (is (= "http://puppetlabs.com/associate_response" (:message_type response)))
-            (is (= {:success true
-                    :id (:id request)}
-                   (message/get-json-data response))))
-          (let [response (client/recv! client)]
-            (is (= [4002 "association unsuccessful"] response))))))))
-
-(def no-assoc-broker-config
-  "A broker that allows no association requests"
-  (assoc-in broker-config [:authorization :rules]
-            [{:name "deny association"
-              :sort-order 400
-              :match-request {:type "path"
-                              :path "/pcp-broker/send"
-                              :query-params {:message_type
-                                             "http://puppetlabs.com/associate_request"}}
-              :allow []}]))
-
-(deftest authorization-stops-connections-test
-  (call-with-broker
-    no-assoc-broker-config
-    (fn []
-      (dotestseq
-        [version protocol-versions]
-        (with-open [client (client/connect :certname "client01.example.com"
-                                           :version version
-                                           :check-association false)]
-          (testing "cannot associate - sends an unsuccessful associate_response"
-            (let [response (client/recv! client)]
-              (is (is-association_response response version))))
-          (testing "cannot associate - closes connection"
-            (let [response (client/recv! client)]
-              (is (= [4002 "association unsuccessful"] response))))
-          (testing "cannot request inventory"
-            (let [request (-> (message/make-message)
-                              (assoc :message_type "http://puppetlabs.com/inventory_request"
-                                     :targets ["pcp:///server"]
-                                     :sender "pcp://client01.example.com/test")
-                              (message/set-expiry 5 :seconds)
-                              (message/set-json-data {:query ["pcp://client01.example.com/test"]}))]
-              (client/send! client request)
-              (let [response (client/recv! client 1000)]
-                (is (= nil response)))))
-          (testing "cannot send messages"
-            (let [message (-> (message/make-message)
-                              (assoc :sender "pcp://client01.example.com/test"
-                                     :targets ["pcp://client01.example.com/test"]
-                                     :message_type "greeting")
-                              (message/set-expiry 5 :seconds)
-                              (message/set-json-data "Hello"))]
-              (client/send! client message)
-              (let [message (client/recv! client 1000)]
-                (is (= nil message))))))))))
 
 ;; Inventory service
 
@@ -548,17 +475,19 @@
                              client02 (client/connect :certname "client02.example.com"
                                                       :version version)]
                    (testing "client01 -> client02 should work"
-                     (let [message (-> (message/make-message :sender "pcp://client01.example.com/test"
-                                                             :message_type "test/sensitive"
-                                                             :targets ["pcp://client02.example.com/test"])
+                     (let [message (-> (message/make-message
+                                         :sender "pcp://client01.example.com/test"
+                                         :message_type "test/sensitive"
+                                         :targets ["pcp://client02.example.com/test"])
                                        (message/set-expiry 5 :seconds))]
                        (client/send! client01 message)
                        (let [received (client/recv! client02)]
                          (is (= (:id message) (:id received))))))
                    (testing "client02 -> client01 should not work"
-                     (let [message (-> (message/make-message :sender "pcp://client02.example.com/test"
-                                                             :message_type "test/sensitive"
-                                                             :targets ["pcp://client01.example.com/test"])
+                     (let [message (-> (message/make-message
+                                         :sender "pcp://client02.example.com/test"
+                                         :message_type "test/sensitive"
+                                         :targets ["pcp://client01.example.com/test"])
                                        (message/set-expiry 5 :seconds))]
                        (client/send! client02 message)
                        (let [received (client/recv! client01 1000)]

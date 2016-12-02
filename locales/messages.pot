@@ -36,39 +36,7 @@ msgid "not connected"
 msgstr ""
 
 #: src/puppetlabs/pcp/broker/core.clj
-msgid "''server'' type connections not accepted"
-msgstr ""
-
-#: src/puppetlabs/pcp/broker/core.clj
-msgid ""
-"Received session association for '{uri}' from '{commonname}' "
-"'{remoteaddress}'. Session was already associated as '{existinguri}'"
-msgstr ""
-
-#: src/puppetlabs/pcp/broker/core.clj
-msgid "Session already associated"
-msgstr ""
-
-#: src/puppetlabs/pcp/broker/core.clj
 msgid "Replying to '{requester}' with associate_response: '{rawmsg}'"
-msgstr ""
-
-#: src/puppetlabs/pcp/broker/core.clj
-msgid "Invalid associate_request ('{reason}'); closing '{uri}' WebSocket"
-msgstr ""
-
-#: src/puppetlabs/pcp/broker/core.clj
-msgid "association unsuccessful"
-msgstr ""
-
-#: src/puppetlabs/pcp/broker/core.clj
-msgid ""
-"Node with URI '{uri}' already associated with connection '{commonname}' "
-"'{remoteaddress}'"
-msgstr ""
-
-#: src/puppetlabs/pcp/broker/core.clj
-msgid "superseded"
 msgstr ""
 
 #: src/puppetlabs/pcp/broker/core.clj

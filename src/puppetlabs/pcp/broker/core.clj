@@ -143,14 +143,15 @@
     data-content))
 
 (s/defn send-error-message
-  [in-reply-to-message :- (s/maybe Message) description :- s/Str connection :- Connection]
+  [in-reply-to-message :- (s/maybe Message)
+   description :- s/Str
+   connection :- Connection]
   (let [data-content (make-error-data-content in-reply-to-message description)
-        error-msg (-> (message/make-message :message_type "http://puppetlabs.com/error_message"
-                                            :sender "pcp:///server")
-                      (message/set-json-data data-content))
-        error-msg (if in-reply-to-message
-                    (assoc error-msg :in-reply-to (:id in-reply-to-message))
-                    error-msg)
+        error-msg (cond-> (message/make-message
+                            :message_type "http://puppetlabs.com/error_message"
+                            :sender "pcp:///server")
+                      true (message/set-json-data data-content)
+                      in-reply-to-message (assoc :in-reply-to (:id in-reply-to-message)))
         {:keys [codec websocket]} connection
         encode (:encode codec)]
     (websockets-client/send! websocket (encode error-msg))
@@ -206,25 +207,6 @@
        (= (:message_type message) "http://puppetlabs.com/associate_request")))
 
 ;; process-associate-request! helper
-(s/defn reason-to-deny-association :- (s/maybe s/Str)
-  "Returns an error message describing why the session should not be
-  allowed, if it should be denied"
-  [broker :- Broker
-   connection :- Connection
-   as :- p/Uri]
-  (let [[_ type] (p/explode-uri as)]
-    (cond
-      (= type "server")
-      (i18n/trs "''server'' type connections not accepted")
-      (= :associated (:state connection))
-      (let [{:keys [uri]} connection]
-        (sl/maplog
-          :debug (assoc (connection/summarize connection)
-                        :uri as
-                        :existinguri uri
-                        :type :connection-already-associated)
-          (i18n/trs "Received session association for '{uri}' from '{commonname}' '{remoteaddress}'. Session was already associated as '{existinguri}'"))
-        (i18n/trs "Session already associated")))))
 
 (s/defn make-associate_response-data-content :- p/AssociateResponse
   [id reason-to-deny]
@@ -242,65 +224,43 @@
         (message/set-json-data response-data)
         (message/set-expiry 3 :seconds))))
 
+;; TODO closing the old connection in a supersede case?
+
 (s/defn process-associate-request! :- (s/maybe Connection)
-  "Send an associate_response that will be successful if:
-    - a reason-to-deny is not specified as an argument nor determined by
-      reason-to-deny-association;
-    - the requester `client_type` is not `server`;
-    - the specified WebSocket connection has not been associated previously.
-  If the request gets denied, the WebSocket connection will be closed and the
-  function returns nil.
-  Otherwise, the 'Connection' object's state will be marked as associated and
-  returned. Also, in case another WebSocket connection with the same client
-  is currently associated, such old connection will be superseded by the new
-  one (i.e. the old connection will be closed by the brocker).
+  "Send a canned associate_response stating success.
+
+   Mark the 'Connection' object's state 'associated' and return it.
+   Also, in case another WebSocket connection with the same client
+   is currently associated, such old connection will be superseded by the new
+   one (i.e. the old connection will be closed by the brocker).
 
   Note that this function will not update the broker by removing the connection
   from the 'connections' map, nor the 'uri-map'. It is assumed that such update
   will be done asynchronously by the onClose handler."
   ;; TODO(ale): make associate_request idempotent when succeed (PCP-521)
-  ([broker :- Broker
-    message :- Message
-    connection :- Connection]
-    (let [requester-uri (:sender message)
-          reason-to-deny (reason-to-deny-association broker connection requester-uri)]
-      (process-associate-request! broker message connection reason-to-deny)))
-  ([broker :- Broker request :- Message connection :- Connection reason-to-deny :- (s/maybe s/Str)]
-    ;; NB(ale): don't validate the associate_request as there's no data chunk...
-    (let [ws (:websocket connection)
-          id (:id request)
-          encode (get-in connection [:codec :encode])
-          requester-uri (:sender request)
-          message (associate-response id requester-uri)]
-      (sl/maplog :debug {:type :associate_response-trace
-                         :requester requester-uri
-                         :rawmsg message}
-                 (i18n/trs "Replying to '{requester}' with associate_response: '{rawmsg}'"))
-        (websockets-client/send! ws (encode message))
-      (if reason-to-deny
-        (do
-          (sl/maplog
-            :debug {:type   :connection-association-failed
-                    :uri    requester-uri
-                    :reason reason-to-deny}
-            (i18n/trs "Invalid associate_request ('{reason}'); closing '{uri}' WebSocket"))
-          (websockets-client/close! ws 4002 (i18n/trs "association unsuccessful"))
-          nil)
-        (let [{:keys [uri-map record-client]} broker]
-          (when-let [old-ws (get-websocket broker requester-uri)]
-            (let [connections (:connections broker)]
-              (sl/maplog
-                :debug (assoc (connection/summarize connection)
-                         :uri requester-uri
-                         :type :connection-association-failed)
-                (i18n/trs "Node with URI '{uri}' already associated with connection '{commonname}' '{remoteaddress}'"))
-              (websockets-client/close! old-ws 4000 (i18n/trs "superseded"))
-              (.remove connections old-ws)))
-          (.put uri-map requester-uri ws)
-          (record-client requester-uri)
-          (assoc connection
-            :uri requester-uri
-            :state :associated))))))
+  [broker :- Broker
+   request :- Message
+   connection :- Connection]
+
+  ;; NB(ale): don't validate the associate_request as there's no data chunk...
+  (let [ws (:websocket connection)
+        id (:id request)
+        encode (get-in connection [:codec :encode])
+        requester-uri (:sender request)
+        message (associate-response id requester-uri)]
+    (sl/maplog :debug {:type :associate_response-trace
+                       :requester requester-uri
+                       :rawmsg message}
+               (i18n/trs "Replying to '{requester}' with associate_response: '{rawmsg}'"))
+    (websockets-client/send! ws (encode message))
+    (let [{:keys [uri-map record-client]} broker]
+      (.put uri-map requester-uri ws)
+      (record-client requester-uri)
+      (assoc connection
+             :uri requester-uri
+             :state :associated)
+      )
+    ))
 
 (s/defn make-inventory_response-data-content :- p/InventoryResponse
   [{:keys [find-clients version] :as broker} {:keys [query]}]
@@ -430,7 +390,10 @@
    in order, if the message: 1) is an associate-request as expected during
    Session Association; 2) is authenticated; 3) is authorized; 4) does not
    use multicast delivery."
-  [broker :- Broker message :- Message connection :- Connection is-association-request :- s/Bool]
+  [broker :- Broker
+   message :- Message
+   connection :- Connection
+   is-association-request :- s/Bool]
   (cond
     (and (= :open (:state connection))
          (not is-association-request)) :to-be-ignored-during-association
@@ -478,14 +441,14 @@
               (log-access :warn (assoc message-data :accessoutcome "AUTHENTICATION_FAILURE"))
               (if is-association-request
                 ;; send an unsuccessful associate_response and close the WebSocket
-                (process-associate-request! broker message connection not-authenticated-msg)
+                (process-associate-request! broker message connection)
                 (send-error-message message not-authenticated-msg connection)))
             :not-authorized
             (let [not-authorized-msg (i18n/trs "Message not authorized")]
               (log-access :warn (assoc message-data :accessoutcome "AUTHORIZATION_FAILURE"))
               (if is-association-request
                 ;; send an unsuccessful associate_response and close the WebSocket
-                (process-associate-request! broker message connection not-authorized-msg)
+                (process-associate-request! broker message connection)
                 ;; TODO(ale): use 'unauthorized' in version 2
                 (send-error-message message not-authorized-msg connection)))
             :multicast-unsupported
