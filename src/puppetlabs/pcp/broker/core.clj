@@ -226,29 +226,26 @@
    is currently associated, such old connection will be superseded by the new
    one (i.e. the old connection will be closed by the brocker).
 
-  Note that this function will not update the broker by removing the connection
-  from the 'connections' map, nor the 'uri-map'. It is assumed that such update
-  will be done asynchronously by the onClose handler."
-  ;; TODO(ale): make associate_request idempotent when succeed (PCP-521)
+   Note that this function will not update the broker by removing the connection
+   from the 'connections' map, nor the 'uri-map'. It is assumed that such update
+   will be done asynchronously by the onClose handler."
   [broker :- Broker
    request :- Message
    connection :- Connection]
-
-  ;; NB(ale): don't validate the associate_request as there's no data chunk...
   (let [ws (:websocket connection)
         id (:id request)
         encode (get-in connection [:codec :encode])
         requester-uri (:sender request)
-        message (canned-associate-response id requester-uri)]
+        message (canned-associate-response id requester-uri)
+        {:keys [uri-map record-client]} broker]
     (sl/maplog :debug {:type :associate_response-trace
                        :requester requester-uri
                        :rawmsg message}
                (i18n/trs "Replying to '{requester}' with associate_response: '{rawmsg}'"))
     (websockets-client/send! ws (encode message))
-    (let [{:keys [uri-map record-client]} broker]
-      (.put uri-map requester-uri ws)
-      (record-client requester-uri)
-      (assoc connection :uri requester-uri))))
+    (.put uri-map requester-uri ws)
+    (record-client requester-uri)
+    (assoc connection :uri requester-uri)))
 
 (s/defn make-inventory_response-data-content :- p/InventoryResponse
   [{:keys [find-clients version] :as broker} {:keys [query]}]
