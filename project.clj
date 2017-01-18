@@ -3,7 +3,7 @@
 (def i18n-version "0.4.3")
 (def http-async-client-version "0.6.1")
 
-(defproject puppetlabs/pcp-broker "0.8.5"
+(defproject puppetlabs/pcp-broker "0.8.5-hafjell"
   :description "PCP fabric messaging broker"
   :url "https://github.com/puppetlabs/pcp-broker"
   :license {:name "Apache License, Version 2.0"
@@ -82,10 +82,14 @@
   :lein-release {:scm :git
                  :deploy-via :lein-deploy}
 
-  :deploy-repositories [["releases" {:url "https://clojars.org/repo"
-                                     :username :env/clojars_jenkins_username
-                                     :password :env/clojars_jenkins_password
-                                     :sign-releases false}]]
+  :deploy-repositories [["releases" {:url "http://nexus.delivery.puppetlabs.net/content/repositories/releases"
+                                     :username :env/nexus_username
+                                     :password :env/nexus_password
+                                     :sign-releases false}]
+                        ["snapshots" {:url "http://nexus.delivery.puppetlabs.net/content/repositories/snapshots/"
+                                      :username :env/nexus_username
+                                      :password :env/nexus_password
+                                      :sign-releases false}]]
 
   :test-paths ["test/unit" "test/integration" "test/utils" "test-resources"]
 

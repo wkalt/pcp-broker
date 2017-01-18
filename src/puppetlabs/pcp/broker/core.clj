@@ -29,6 +29,7 @@
   {:activemq-broker    Object
    :accept-consumers   s/Int
    :delivery-consumers s/Int
+   :max-message-size   s/Int
    :activemq-consumers Atom
    :record-client      IFn
    :find-clients       IFn
@@ -630,6 +631,7 @@
       (let [connection (add-connection! broker ws codec)
             {:keys [common-name]} connection
             idle-timeout (* 1000 60 15)]
+        (.setMaxBinaryMessageSize (.getPolicy (.getSession ws)) (:max-message-size broker))
         (if (nil? common-name)
           (do
             (sl/maplog :debug (assoc (connection/summarize connection)
@@ -706,7 +708,7 @@
 (s/defn init :- Broker
   [options :- InitOptions]
   (let [{:keys [path activemq-spool accept-consumers delivery-consumers
-                add-websocket-handler
+                max-message-size add-websocket-handler
                 record-client find-clients authorization-check
                 get-route
                 get-metrics-registry ssl-cert]} options]
@@ -724,6 +726,7 @@
                               :connections        (ConcurrentHashMap.)
                               :uri-map            (ConcurrentHashMap.)
                               :broker-cn          (get-broker-cn ssl-cert)
+                              :max-message-size   max-message-size
                               :state              (atom :starting)}
           metrics            (build-and-register-metrics broker)
           broker             (assoc broker :metrics metrics)]

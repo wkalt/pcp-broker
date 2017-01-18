@@ -18,6 +18,7 @@
     (let [activemq-spool     (get-in-config [:pcp-broker :broker-spool])
           accept-consumers   (get-in-config [:pcp-broker :accept-consumers] 4)
           delivery-consumers (get-in-config [:pcp-broker :delivery-consumers] 16)
+          max-message-size   (get-in-config [:pcp-broker :max-message-size] 65536)
           inventory          (make-inventory)
           ssl-cert           (if-let [server (get-server this :v1)]
                                (get-in-config [:webserver (keyword server) :ssl-cert])
@@ -25,6 +26,7 @@
           broker             (core/init {:activemq-spool activemq-spool
                                          :accept-consumers accept-consumers
                                          :delivery-consumers delivery-consumers
+                                         :max-message-size max-message-size
                                          :add-websocket-handler (partial add-websocket-handler this)
                                          :record-client  (partial record-client inventory)
                                          :find-clients   (partial find-clients inventory)
