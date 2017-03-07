@@ -10,25 +10,47 @@
 
 (def default-webserver (:webserver puppetlabs.pcp.testutils.service/broker-config))
 
+(def mock-server-config
+  {:webserver {:mock-server-1 (assoc default-webserver :ssl-port 58143)
+               :mock-server-2 (assoc default-webserver :ssl-port 58144
+                                     :ssl-key "./test-resources/ssl/private_keys/controller01.example.com.pem"
+                                     :ssl-cert "./test-resources/ssl/certs/controller01.example.com.pem")
+               :mock-server-3 (assoc default-webserver :ssl-port 58145
+                                     :ssl-key "./test-resources/ssl/private_keys/controller02.example.com.pem"
+                                     :ssl-cert "./test-resources/ssl/certs/controller02.example.com.pem")}
+
+   :web-router-service
+   {:puppetlabs.pcp.testutils.server/mock-server {:mock-server-1 "/server"
+                                                  :mock-server-2 "/server"
+                                                  :mock-server-3 "/server"}}})
+
+
+(def only-broker-config
+  (-> puppetlabs.pcp.testutils.service/broker-config
+      (assoc
+        :webserver {:pcp-broker (assoc default-webserver :default-server true)}
+        :pcp-broker {:controller-uris ["wss://localhost:58143/server"]
+                     :controller-whitelist ["http://puppetlabs.com/inventory_request"
+                                            "greeting"]})))
 (def broker-config
   (-> puppetlabs.pcp.testutils.service/broker-config
       (assoc
         :webserver {
-          :pcp-broker (assoc default-webserver :default-server true)
-          :mock-server-1 (assoc default-webserver :ssl-port 58143)
-          :mock-server-2 (assoc default-webserver :ssl-port 58144
-                                                  :ssl-key "./test-resources/ssl/private_keys/controller01.example.com.pem"
-                                                  :ssl-cert "./test-resources/ssl/certs/controller01.example.com.pem")
-          :mock-server-3 (assoc default-webserver :ssl-port 58145
-                                                  :ssl-key "./test-resources/ssl/private_keys/controller02.example.com.pem"
-                                                  :ssl-cert "./test-resources/ssl/certs/controller02.example.com.pem")}
-       :pcp-broker {:controller-uris ["wss://localhost:58143/server"]
-                    :controller-whitelist ["http://puppetlabs.com/inventory_request"
-                                           "greeting"]})
+                    :pcp-broker (assoc default-webserver :default-server true)
+                    :mock-server-1 (assoc default-webserver :ssl-port 58143)
+                    :mock-server-2 (assoc default-webserver :ssl-port 58144
+                                          :ssl-key "./test-resources/ssl/private_keys/controller01.example.com.pem"
+                                          :ssl-cert "./test-resources/ssl/certs/controller01.example.com.pem")
+                    :mock-server-3 (assoc default-webserver :ssl-port 58145
+                                          :ssl-key "./test-resources/ssl/private_keys/controller02.example.com.pem"
+                                          :ssl-cert "./test-resources/ssl/certs/controller02.example.com.pem")}
+        :pcp-broker {:controller-uris ["wss://localhost:58143/server"]
+                     :controller-whitelist ["http://puppetlabs.com/inventory_request"
+                                            "greeting"]})
       (assoc-in [:web-router-service :puppetlabs.pcp.testutils.server/mock-server]
-        {:mock-server-1 "/server"
-         :mock-server-2 "/server"
-         :mock-server-3 "/server"})))
+                {:mock-server-1 "/server"
+                 :mock-server-2 "/server"
+                 :mock-server-3 "/server"})))
 
 (deftest controller-connection-test
   (let [connected (promise)]
@@ -218,17 +240,37 @@
                     (when (zero? @server-message-sent)
                       (websockets-client/send! ws (message/encode inventory-subscribe))))
                   server/on-text (fn [_ ws text] (deliver inventory-response (message/decode text)))]
-      (with-app-with-config app (conj broker-services server/mock-server) broker-config
-        (is (deref inventory-response 3000 nil))
-        (is (= (:id inventory-subscribe) (:in_reply_to @inventory-response)))
-        (is (= [] (get-in @inventory-response [:data :uris])))
+      (with-app-with-config app broker-services only-broker-config
+        (let [database (:database (get-context app :BrokerService))]
 
-        ;; Disconnect the mock server
-        (doseq [ws @(:inventory (get-context app :MockServer))]
-          (websockets-client/close! ws))
-        (is (deref removed-subscription 3000 nil))
 
-        (with-open [client (client/connect :certname agent-cert :force-association true)]
-          (let [server-messages-sent @server-message-sent]
-            (#'puppetlabs.pcp.broker.inventory/send-updates (get-broker app))
-            (is (= server-messages-sent @server-message-sent))))))))
+        (with-app-with-config mock-server server/mock-server-services mock-server-config
+          (is (deref inventory-response 3000 nil))
+          (is (= (:id inventory-subscribe) (:in_reply_to @inventory-response)))
+          (is (= [] (get-in @inventory-response [:data :uris])))
+
+          ;; Disconnect the mock server
+          (doseq [ws @(:inventory (get-context mock-server :MockServer))]
+            (websockets-client/close! ws))
+          (is (deref removed-subscription 3000 nil))
+
+          (with-open [client (client/connect :certname agent-cert :force-association true)]
+            (let [server-messages-sent @server-message-sent]
+              (#'puppetlabs.pcp.broker.inventory/send-updates (get-broker app))
+              (is (= server-messages-sent @server-message-sent)))))
+
+          (testing "controller reconnection"
+            (with-app-with-config mock-server server/mock-server-services mock-server-config
+              (println "DATABASE NOW IS" database)
+              (Thread/sleep 1000)
+              (println "mockserver context is" (get-context mock-server :MockServer) )
+              (server/wait-for-inbound-connection (get-context mock-server :MockServer))
+              (Thread/sleep 1000)
+              (with-open [client (client/connect :certname agent-cert)]
+                (Thread/sleep 1000)
+                (Thread/sleep 1000)
+                (testing "client connections now successful"
+                  (while (empty? (:inventory @database))
+                    (Thread/sleep 100))
+                  (is (not (empty? (:inventory @database)))))))))
+        ))))

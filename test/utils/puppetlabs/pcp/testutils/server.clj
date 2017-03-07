@@ -41,3 +41,11 @@
             (websockets-client/close! ws)
           (catch NullPointerException _)))
         (dissoc context :inventory)))
+
+(def mock-server-services
+  [mock-server webrouting-service jetty9-service])
+
+(defn wait-for-inbound-connection
+  [svc-context]
+  (while (empty? @(:inventory svc-context))
+    (Thread/sleep 100)))
